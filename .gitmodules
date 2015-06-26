@@ -1,0 +1,33 @@
+[submodule "vendor/src/github.com/Sirupsen/logrus"]
+	path = vendor/src/github.com/Sirupsen/logrus
+	url = https://github.com/Sirupsen/logrus.git
+[submodule "vendor/src/github.com/spf13/viper"]
+	path = vendor/src/github.com/spf13/viper
+	url = https://github.com/spf13/viper.git
+[submodule "vendor/src/github.com/BurntSushi/toml"]
+	path = vendor/src/github.com/BurntSushi/toml
+	url = https://github.com/BurntSushi/toml.git
+[submodule "vendor/src/github.com/kr/pretty"]
+	path = vendor/src/github.com/kr/pretty
+	url = https://github.com/kr/pretty.git
+[submodule "vendor/src/github.com/kr/text"]
+	path = vendor/src/github.com/kr/text
+	url = https://github.com/kr/text.git
+[submodule "vendor/src/github.com/magiconair/properties"]
+	path = vendor/src/github.com/magiconair/properties
+	url = https://github.com/magiconair/properties.git
+[submodule "vendor/src/github.com/mitchellh/mapstructure"]
+	path = vendor/src/github.com/mitchellh/mapstructure
+	url = https://github.com/mitchellh/mapstructure.git
+[submodule "vendor/src/github.com/spf13/cast"]
+	path = vendor/src/github.com/spf13/cast
+	url = https://github.com/spf13/cast.git
+[submodule "vendor/src/github.com/spf13/jwalterweatherman"]
+	path = vendor/src/github.com/spf13/jwalterweatherman
+	url = https://github.com/spf13/jwalterweatherman.git
+[submodule "vendor/src/github.com/spf13/pflag"]
+	path = vendor/src/github.com/spf13/pflag
+	url = https://github.com/spf13/pflag.git
+[submodule "vendor/src/gopkg.in/yaml.v2"]
+	path = vendor/src/gopkg.in/yaml.v2
+	url = https://gopkg.in/yaml.v2

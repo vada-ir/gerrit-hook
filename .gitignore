@@ -1,0 +1,16 @@
+*\#*
+.\#*
+*.a
+pkg/
+vendor/pkg/
+*.out
+bin/*
+!bin/*.sh
+!bin/*.conf
+!bin/*.yml
+vendor/bin/*
+.env
+.vagrant
+.o
+.dir-locals.el
+.vagenv
