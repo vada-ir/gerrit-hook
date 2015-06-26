@@ -31,3 +31,6 @@
 [submodule "vendor/src/gopkg.in/yaml.v2"]
 	path = vendor/src/gopkg.in/yaml.v2
 	url = https://gopkg.in/yaml.v2
+[submodule "vendor/src/github.com/fzerorubid/go-redmine"]
+	path = vendor/src/github.com/fzerorubid/go-redmine
+	url = https://github.com/fzerorubigd/go-redmine.git
