@@ -342,5 +342,6 @@ func changeMerged(cmd map[string]string) error {
 	if err != nil {
 		return err
 	}
+	i.StatusID = viper.GetInt("redmine_status_resolved")
 	return changeStatus(i)
 }
