@@ -10,21 +10,20 @@ import (
 	"os/exec"
 	"os/user"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/fzerorubid/go-redmine"
 	"github.com/spf13/viper"
 )
 
-var r *redmine.Client
-
-var tt = regexp.MustCompile("(@[0-9][0-9hm])")
+var tt = regexp.MustCompile("(@[0-9][0-9hm]+)")
 var issue = regexp.MustCompile("(#[0-9]+)")
+var umail = regexp.MustCompile("([^<(]+)[<(]([^>)]+)")
 
 func main() {
 	initConfig()
-	r = redmine.NewClient(viper.GetString("redmine_url"), viper.GetString("redmine_apikey"))
 
 	var cmd = make(map[string]string)
 
@@ -50,25 +49,21 @@ func main() {
 	}
 
 	cmd = addExtraField(cmd)
-	var (
-		commiter string
-		msg      string
-	)
-	if cmd["action"] == "patchset_created" {
-		var err error
-		commiter, msg, err = pathsetCreated(cmd)
-		if err != nil {
-			logrus.Warn(err)
-			return
-		}
-	} else {
-		return
-	}
 
 	// Ok the commit has no isue attaced, exit. its not correct
 	_, ok := cmd["original_issue"]
 	if !ok {
 		os.Exit(1)
+	}
+	var (
+		commiter string
+		msg      []byte
+		err      error
+	)
+	commiter, msg, err = getCommitData(cmd)
+	if err != nil {
+		logrus.Warn(err)
+		return
 	}
 
 	out, err := execGitCommand(viper.GetString("root_path"), "commit", "--allow-empty", "--message", string(msg), "--author", commiter)
@@ -76,6 +71,21 @@ func main() {
 		logrus.Warn(err)
 		logrus.Warn(string(out))
 	}
+
+	err = nil
+	if cmd["action"] == "patchset-created" {
+		err = pathsetCreated(cmd)
+	} else if cmd["action"] == "comment-added" {
+		err = commentAdded(cmd)
+	} else if cmd["action"] == "change-merged" {
+		err = changeMerged(cmd)
+	}
+
+	if err != nil {
+		logrus.Warn(err)
+		os.Exit(1)
+	}
+
 }
 
 func initConfig() {
@@ -83,7 +93,9 @@ func initConfig() {
 	if err != nil {
 		logrus.Warn(err)
 	}
-	viper.AddConfigPath(usr.HomeDir + "/ghooks")
+	viper.SetConfigName("main")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(usr.HomeDir + "/ghooks/")
 
 	// Root path of the ghook repo to commit and push
 	_ = viper.BindEnv("root_path", "ROOT_PATH")
@@ -94,6 +106,18 @@ func initConfig() {
 
 	viper.SetDefault("commiter_name", "gerrit hook")
 	viper.SetDefault("commiter_mail", "dev@vada.ir")
+
+	viper.SetDefault("redmine_url", "")
+	viper.SetDefault("redmine_apikey", "")
+	viper.SetDefault("redmine_status_inprogress", 2)
+	viper.SetDefault("redmine_status_inreview", 7)
+	viper.SetDefault("redmine_status_resolved", 3)
+
+	viper.SetDefault("redmine_activity_review", 18)
+
+	if err := viper.ReadInConfig(); err != nil {
+		logrus.Warn(err)
+	}
 }
 
 func addExtraField(cmd map[string]string) map[string]string {
@@ -203,27 +227,120 @@ func execGitCommand(root string, args ...string) (stdout []byte, err error) {
 	return
 }
 
-func pathsetCreated(cmd map[string]string) (string, string, error) {
-	kind, ok := cmd["kind"]
-	if !ok {
-		return "", "", errors.New("invalid")
+// getUserEmail convert "test <test@test.com>" to test, test@test.com
+func getUserEmail(s string) (string, string, error) {
+	m := umail.FindAllSubmatch([]byte(s), -1)
+	if len(m) != 1 || len(m[0]) != 3 {
+		return "", "", errors.New("not matched")
 	}
 
-	if kind == "NO_CHANGE" {
-		return "", "", errors.New("no change")
-	}
+	return string(m[0][1]), string(m[0][2]), nil
+}
 
-	owner := cmd["change_owner"]
+func pathsetCreated(cmd map[string]string) error {
+	owner, _, err := getUserEmail(cmd["uploader"])
+	if err != nil {
+		return err
+	}
 	url := cmd["change_url"]
-	time := cmd["original_time"]
+	t := cmd["original_time"]
+	msg := cmd["original_message"]
 	issue := cmd["original_issue"]
+	if issue[0] == '#' {
+		issue = issue[1:]
+	}
 
-	msg := fmt.Sprintf(`
+	if len(t) > 1 {
+		t = t[1:]
+	}
+
+	msg = fmt.Sprintf(`
 pathset created
 
 url is %s
 
-refs %s %s
-`, url, issue, time)
-	return owner, msg, nil
+the comment is
+ %s
+`, url, msg)
+
+	i := &IssueRequest{}
+
+	i.User = owner
+	i.Notes = msg
+	i.ID, err = strconv.Atoi(issue)
+	if err != nil {
+		return err
+	}
+	i.StatusID = viper.GetInt("redmine_status_inreview")
+
+	return changeStatus(i)
+}
+
+func commentAdded(cmd map[string]string) error {
+	owner, _, err := getUserEmail(cmd["author"])
+	if err != nil {
+		return err
+	}
+	comment := cmd["comment"]
+
+	var t time.Duration
+	res := tt.FindAllString(comment, -1)
+	if len(res) > 0 {
+		first := res[0]
+		first = first[1:]
+		t, err = time.ParseDuration(first)
+		if err != nil {
+			logrus.Warn(err)
+		}
+	}
+	issue := cmd["original_issue"]
+	if issue[0] == '#' {
+		issue = issue[1:]
+	}
+
+	if t > 0 {
+		tr := &TimeRequest{}
+		//tr.SpentOn = time.Now()
+		tr.IssueID, err = strconv.Atoi(issue)
+		if err != nil {
+			return err
+		}
+		tr.User = owner
+		tr.ActivityID = viper.GetInt("redmine_activity_review")
+		tr.Hours = t.Hours()
+		tr.Comment = comment
+		err = addTimeEntry(tr)
+		if err != nil {
+			return err
+		}
+	}
+
+	i := &IssueRequest{}
+	i.User = owner
+	i.Notes = comment
+	i.ID, err = strconv.Atoi(issue)
+	if err != nil {
+		return err
+	}
+	return changeStatus(i)
+}
+
+func changeMerged(cmd map[string]string) error {
+	owner, _, err := getUserEmail(cmd["submitter"])
+	if err != nil {
+		return err
+	}
+	issue := cmd["original_issue"]
+	if issue[0] == '#' {
+		issue = issue[1:]
+	}
+
+	i := &IssueRequest{}
+	i.User = owner
+	i.Notes = fmt.Sprintf(`change submitted, the review thread is %s `, cmd["change_url"])
+	i.ID, err = strconv.Atoi(issue)
+	if err != nil {
+		return err
+	}
+	return changeStatus(i)
 }
