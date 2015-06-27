@@ -115,6 +115,9 @@ func initConfig() {
 
 	viper.SetDefault("redmine_activity_review", 18)
 
+	viper.SetDefault("upstream_git_pattern", "git@github.com/%s.git")
+	viper.SetDefault("upstream_enable", false)
+
 	if err := viper.ReadInConfig(); err != nil {
 		logrus.Warn(err)
 	}
@@ -333,6 +336,13 @@ func changeMerged(cmd map[string]string) error {
 	issue := cmd["original_issue"]
 	if issue[0] == '#' {
 		issue = issue[1:]
+	}
+
+	// Try to push it to upstream if the upstream is enabled
+	if viper.GetBool("upstream_enable") {
+		pattern := viper.GetString("upstream_git_pattern")
+		pattern = fmt.Sprintf(pattern, cmd["project"])
+		execGitCommand("", "push", pattern, "--all")
 	}
 
 	i := &IssueRequest{}
