@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"os/user"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -342,7 +344,17 @@ func changeMerged(cmd map[string]string) error {
 	if viper.GetBool("upstream_enable") {
 		pattern := viper.GetString("upstream_git_pattern")
 		pattern = fmt.Sprintf(pattern, cmd["project"])
-		execGitCommand("", "push", pattern, "--all")
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			out, err := execGitCommand("", "push", pattern, "--all")
+			if err != nil {
+				ioutil.WriteFile(viper.GetString("root_path")+"/push-err.log", out, 0644)
+			}
+		}()
+
+		defer wg.Wait()
 	}
 
 	i := &IssueRequest{}
