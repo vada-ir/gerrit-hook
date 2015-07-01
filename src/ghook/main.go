@@ -20,12 +20,21 @@ import (
 	"github.com/spf13/viper"
 )
 
+var log = logrus.New()
+
 var tt = regexp.MustCompile("(@[0-9][0-9hm]+)")
 var issue = regexp.MustCompile("(#[0-9]+)")
 var umail = regexp.MustCompile("([^<(]+)[<(]([^>)]+)")
+var fix = regexp.MustCompile("(?i)(fix|fixes) (#[0-9]+)")
 
 func main() {
 	initConfig()
+	f, err := os.OpenFile(viper.GetString("root_path")+"/app.log", os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		logrus.Fatal(err)
+	}
+	defer f.Close()
+	log.Out = f
 
 	var cmd = make(map[string]string)
 
@@ -60,18 +69,17 @@ func main() {
 	var (
 		commiter string
 		msg      []byte
-		err      error
 	)
 	commiter, msg, err = getCommitData(cmd)
 	if err != nil {
-		logrus.Warn(err)
+		log.Warn(err)
 		return
 	}
 
 	out, err := execGitCommand(viper.GetString("root_path"), "commit", "--allow-empty", "--message", string(msg), "--author", commiter)
 	if err != nil {
-		logrus.Warn(err)
-		logrus.Warn(string(out))
+		log.Warn(err)
+		log.Warn(string(out))
 	}
 
 	err = nil
@@ -84,7 +92,7 @@ func main() {
 	}
 
 	if err != nil {
-		logrus.Warn(err)
+		log.Warn(err)
 		os.Exit(1)
 	}
 
@@ -93,7 +101,7 @@ func main() {
 func initConfig() {
 	usr, err := user.Current()
 	if err != nil {
-		logrus.Warn(err)
+		log.Warn(err)
 	}
 	viper.SetConfigName("main")
 	viper.SetConfigType("yaml")
@@ -121,7 +129,7 @@ func initConfig() {
 	viper.SetDefault("upstream_enable", false)
 
 	if err := viper.ReadInConfig(); err != nil {
-		logrus.Warn(err)
+		log.Warn(err)
 	}
 }
 
@@ -173,7 +181,7 @@ func addExtraField(cmd map[string]string) map[string]string {
 			}
 
 		} else {
-			logrus.Warn(err)
+			log.Warn(err)
 		}
 	}
 
@@ -190,7 +198,7 @@ func getCommitData(cmd map[string]string) (string, []byte, error) {
 func addFile(cmd map[string]string) error {
 	j, err := json.MarshalIndent(cmd, "", "    ")
 	if err != nil {
-		logrus.Warn(err)
+		log.Warn(err)
 		return err
 	}
 
@@ -211,7 +219,7 @@ func addFile(cmd map[string]string) error {
 
 	out, err := execGitCommand(viper.GetString("root_path"), "add", path)
 	if err != nil {
-		logrus.Warn(string(out))
+		log.Warn(string(out))
 	}
 	return err
 }
@@ -259,6 +267,8 @@ func pathsetCreated(cmd map[string]string) error {
 		t = t[1:]
 	}
 
+	isFix := fix.MatchString(msg)
+
 	msg = fmt.Sprintf(`
 pathset created
 
@@ -276,8 +286,9 @@ the comment is
 	if err != nil {
 		return err
 	}
-	i.StatusID = viper.GetInt("redmine_status_inreview")
-
+	if isFix {
+		i.StatusID = viper.GetInt("redmine_status_inreview")
+	}
 	return changeStatus(i)
 }
 
@@ -295,7 +306,7 @@ func commentAdded(cmd map[string]string) error {
 		first = first[1:]
 		t, err = time.ParseDuration(first)
 		if err != nil {
-			logrus.Warn(err)
+			log.Warn(err)
 		}
 	}
 	issue := cmd["original_issue"]
