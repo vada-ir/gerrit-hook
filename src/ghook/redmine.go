@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
+	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/viper"
 )
 
@@ -79,12 +79,13 @@ func callCurl(method, user, apikey, url, payload string) error {
 		payload,
 		url,
 	}
-	logrus.Warn(strings.Join(args, " "))
+	log.Warn(strings.Join(args, " "))
 	curl := exec.Command("curl", args...)
 	out, err := curl.CombinedOutput()
+	log.WithField("command", strings.Join(args, " ")).WithField("output", string(out)).Debug(err)
 
 	if err != nil {
-		logrus.Warn(string(out))
+		log.Warn(string(out))
 	}
 
 	return err

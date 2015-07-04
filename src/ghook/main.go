@@ -16,11 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
+	log "github.com/Sirupsen/logrus"
 	"github.com/spf13/viper"
 )
-
-var log = logrus.New()
 
 var tt = regexp.MustCompile("(@[0-9][0-9hm]+)")
 var issue = regexp.MustCompile("(#[0-9]+)")
@@ -29,12 +27,7 @@ var fix = regexp.MustCompile("(?i)(fix|fixes) (#[0-9]+)")
 
 func main() {
 	initConfig()
-	f, err := os.OpenFile(viper.GetString("root_path")+"/app.log", os.O_APPEND|os.O_WRONLY, 0600)
-	if err != nil {
-		logrus.Fatal(err)
-	}
-	defer f.Close()
-	log.Out = f
+	var err error
 
 	var cmd = make(map[string]string)
 
@@ -53,6 +46,7 @@ func main() {
 			cmd[key] = value
 		}
 	}
+	cmd["base_repo"] = viper.GetString("git_dir")
 
 	// If the commit is not available just ignore the hook
 	if _, ok := cmd["commit"]; !ok {
@@ -237,6 +231,7 @@ func execGitCommand(root string, args ...string) (stdout []byte, err error) {
 		cmd.Env = os.Environ()
 	}
 	stdout, err = cmd.CombinedOutput()
+	log.WithField("command", strings.Join(args, " ")).WithField("root", root).WithField("output", string(stdout)).Debug(err)
 	return
 }
 
